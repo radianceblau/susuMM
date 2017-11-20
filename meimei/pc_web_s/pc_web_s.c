@@ -14,18 +14,14 @@
 #define MAX_CLIENT_NUM	100			//此server能够接受的client最大数量
 #define MAX_CLIENT_NAME_LEN 100		//每个client上报name的最大字节数
 #define MAX_MSG_LEN	10240
-struct st_radia_msg  
-{  
-    long int msg_type;  
-    char text[MAX_MSG_LEN];  
-};
 
 char client_name_table[MAX_CLIENT_NUM][MAX_CLIENT_NAME_LEN] = {0};//1，每个client需要上报一个name，用于标示自身。2，client_neme_table中为NULL表示该位置的连接资源未被使用。3，client_name_table中的位置确定connect_th表中的位置
 pthread_t connect_th, read_event_th, client_th[MAX_CLIENT_NUM];//每个client对用一个线程
 char thread_send_flag[MAX_CLIENT_NUM] = {0};
 int client_socket_descriptor[MAX_CLIENT_NUM];
 int service_socket_descriptor;
-int key_event = 0, need_send_flag = 1;
+
+char recv_msg[MAX_MSG_LEN], send_msg[MAX_MSG_LEN];
 
 int get_free_client_internal_id()
 {
@@ -58,66 +54,80 @@ int free_client_internal_id(int id)
 	return 0;
 }
 
-void set_thread_flag()
+//返回制定字符c在字符串str中的个数
+int get_nums_char(char *str, char c)
 {
-	int i;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)//当前有多少个client处于连接状态，则相应设置thread_send_flag，以确保所有线程都已经将msg发送出去
-	{
-		if(client_name_table[i][0] == 0)
-			thread_send_flag[i] = 0;
-		else
-			thread_send_flag[i] = 1;
-	}
+	int i, num = 0;
+	for(i = 0; i < strlen(str); i++)
+		if(str[i] == c)
+			num++;
+	return num;
 }
 
-int check_thread_flag()
+//返回指定字符c在字符串str中第num次出现的位置，如查找失败则返回-1
+int get_cursor_char(char *str, char c, int num)
 {
-	int i;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)
+	int i, n = 0;
+	if(num <= 0)
+		return -1;
+	for(i = 0; i < strlen(str); i++)
 	{
-		printf("i:%d,flag:%d\n", i, thread_send_flag[i]);
-		if(thread_send_flag[i] != 0)
-			return -1;
+		if(str[i] == c)
+			n++;
+		if(n == num)
+			return i;
+	}
+	return 0;
+}
+
+//http://172.16.12.135:9992/?x=10&y=45&m=3&bg_color=0xFF00&wd_color=0x0000
+//GET /?x=10&y=45&m=3&bg_color=0xFF00&wd_color=0x0000 HTTP/1.1
+int parse_requestline(char* req_line, int * para_x, int *para_y, int *para_m, int *para_bg_color, int* para_wd_color)
+{
+	int n, next_n;
+	char num_string[10];
+	if(strncmp(req_line, "GET", 3) != 0)//本web server只处理GET请求
+	{//请求命令格式是否正确
+		printf("error request! not GET method\n");
+		return -1;
+	}
+	if(get_nums_char(req_line, '&') != 4)
+	{
+		printf("error request! error nums of &\n");
+		return -1;
+	}
+	else
+	{
+		n = get_cursor_char(req_line, '?', 1);
+		next_n = get_cursor_char(req_line, '&', 1);
+		strncpy(num_string, req_line[n+1], next_n - n);//will do
+		//*para_x = atoi();
 	}
 	return 1;
 }
 
-int checksock(int s)
-{
-
-	return 0;
-}
-
 void *client_handler(void *pcii)
 {
-	struct st_radia_msg recv_msg, send_msg;
-	int ret, cii = *((int *)pcii);
+	int ret, cii = *((int *)pcii), n;
 	int csd = client_socket_descriptor[cii];
-	while(1)
+	char buffer[1024];
+	int para_x, para_y, para_m, para_bg_color, para_wd_color;
+	//此处模拟http协议，因为http协议是无状态的，因此不保持连接，通信结束立即断开
+	memset(&recv_msg, 0, MAX_MSG_LEN);
+	ret = read(csd, (void *)(&recv_msg), MAX_MSG_LEN);
+	printf("recv:%s\n", recv_msg);
+	n = get_cursor_char(recv_msg, '\r', 1);//获取字符串第一行即requestline的位置
+	memset(buffer, 0, 1024);
+	strncpy(buffer, recv_msg, n+2);
+	if(1 == parse_requestline(buffer, &para_x, &para_y, &para_m, &para_bg_color, &para_wd_color))//解析http请求行中参数成功
 	{
-		memset(&recv_msg, 0, sizeof(struct st_radia_msg));
-		memset(&send_msg, 0, sizeof(struct st_radia_msg));
-		// if(0)//checksock(csd) == -1)//检测client是否断开
-		// {
-			// break;
-		// }
-		// else if(need_send_flag)
-		// {
-			// printf("client msg :%s\n", recv_msg.text);
-			// send_msg.msg_type = 1;
-			//整理输入事件消息，发送给关心此变化的进程
-			//.............
-			// sprintf(send_msg.text, "1");
-			// send(csd, (void *)(&recv_msg), strlen(recv_msg.text) + sizeof(long int), 0);
-			// thread_send_flag[cii] = 0;			
-		// }
-		ret = read(csd, (void *)(&recv_msg), sizeof(struct st_radia_msg));
-		printf("recv:%s\n", recv_msg);
-		
-		sprintf(send_msg.text, "HTTP/1.1 200 OK\r\n<html><body><h1>It works!</h1><p>This is the default web page for this server.</p><p>The web server software is running but no content has been added, yet.</p></body></html>");
-		send(csd, send_msg.text, strlen(send_msg.text), 0);
-		usleep(500000);
-		break;
+		memset(send_msg, 0, MAX_MSG_LEN);
+		memset(buffer, 0, 1024);
+		sprintf(buffer, "<html><body><h1>It works!</h1><p>This is the default web page for this server.</p><p>The web server software is running but no content has been added, yet.</p></body></html>");
+		sprintf(send_msg, "HTTP/1.1 200 OK\r\nContent-Type:text/html\r\nContend-Length:%d\r\n\r\n", strlen(buffer));
+		strcat(send_msg, buffer);
+		send(csd, send_msg, strlen(send_msg), 0);
+		printf("send ok!\n");
 	}
 	printf("disconnect one, internal id %d\n", cii);
 	free_client_internal_id(cii);
@@ -154,23 +164,6 @@ void *connect_handler(void *arg)
 		}
 		usleep(500000);		
 	}	
-}
-
-void *read_event_handler(void *arg)
-{
-	while(1)
-	{
-		if(1)//read("dev/event0", buf) > 0)
-		{
-			key_event = 16;
-			need_send_flag = 1;
-			printf("set need_send_flag 1\n");
-		}
-		set_thread_flag();
-		while(check_thread_flag() == -1);//等待，直至所有thread发送完成
-		need_send_flag = 0;
-		usleep(1000000);
-	}
 }
 
 void init_socket_server()
@@ -211,7 +204,6 @@ int main()
 	printf("run display service!\r\n");
 	init_socket_server();
 	pthread_create(&connect_th, NULL, connect_handler, (void *)NULL);//创建线程，等待client连接请求
-	//pthread_create(&read_event_th, NULL, read_event_handler, (void *)NULL);//创建线程，扫描相应按键、tp节点
 	while(1)
 	{
 		//nothing to do
