@@ -191,10 +191,16 @@ void init_display()
 #define MAX_CLIENT_NUM	100			//此server能够接受的client最大数量
 #define MAX_CLIENT_NAME_LEN 100		//每个client上报name的最大字节数
 #define MAX_MSG_LEN	100
+//void show_ascii(unsigned int dwOffset_x, unsigned int dwOffset_y, int multiple, int num, short bg_color, short word_color)
 struct st_radia_msg  
 {  
-    char msg_type;  
-    char text[MAX_MSG_LEN];  
+    int type;			//0x00 led; 0x10 pure,0x11 ascii,0x12 word
+	int x;
+	int y;
+	int multiple;
+	int num;
+	int bg_color;
+	int word_color;
 };
 
 char client_name_table[MAX_CLIENT_NUM][MAX_CLIENT_NAME_LEN] = {0};//1，每个client需要上报一个name，用于标示自身。2，client_neme_table中为NULL表示该位置的连接资源未被使用。3，client_name_table中的位置确定connect_th表中的位置
@@ -224,13 +230,14 @@ int free_client_internal_id(int id)
 
 void *client_handler(void *pcii)
 {
-	struct st_radia_msg recv_msg, send_msg;
+	struct st_radia_msg recv_msg;
+	char send_msg[100];
 	int ret, cii = *((int *)pcii);
 	int csd = client_socket_descriptor[cii];
 	while(1)
 	{
-		memset(&recv_msg, 0, sizeof(struct st_radia_msg));
-		memset(&send_msg, 0, sizeof(struct st_radia_msg));
+		memset(&recv_msg, 0, sizeof(recv_msg));
+		memset(&send_msg, 0, sizeof(send_msg));
 		ret = read(csd, (void *)(&recv_msg), sizeof(struct st_radia_msg));
 		//printf("ret :%d\n", ret);
 		if(ret <= 0)//管理client id，检测client是否断开
@@ -238,20 +245,28 @@ void *client_handler(void *pcii)
 			break;
 		}
 		//memcpy(client_name_table[]
-		printf("client msg :%s\n", recv_msg.text);
+		printf("client msg type:0x%x,x:%d,y:%d,multiple:%d,num:%d,bg_color:0x%x,word_color:0x%x\n", 
+							recv_msg.type, recv_msg.x, recv_msg.y, recv_msg.multiple, recv_msg.num, recv_msg.bg_color, recv_msg.word_color);
 		//根据msg 完成display处理
 		//.........
-		if(memcmp(recv_msg.text, "1", 1) == 0)
+		switch(recv_msg.type)
 		{
-			show_pure_color(SCREEN_COLOR_RED);
+			case 0x10://pure
+				show_pure_color(recv_msg.bg_color);
+				break;
+			case 0x11://ascii
+				show_ascii(recv_msg.x, recv_msg.y, recv_msg.multiple, recv_msg.num, recv_msg.bg_color, recv_msg.word_color);
+				break;
+			case 0x12://word
+				show_word(recv_msg.x, recv_msg.y, recv_msg.multiple, recv_msg.num, recv_msg.bg_color, recv_msg.word_color);
+				break;
+			case 0x00://led
+				break;
+			default:
+				break;
 		}
-		else
-		{
-			show_pure_color(SCREEN_COLOR_GREEN);
-		}
-		send_msg.msg_type = 1;
-		sprintf(send_msg.text, "display!");
-		send(csd, (void *)(&recv_msg), strlen(recv_msg.text) + sizeof(char), 0);
+		sprintf(send_msg, "display!");
+		send(csd, (void *)(&send_msg), strlen(send_msg), 0);
 		usleep(500000);
 	}
 	printf("disconnect one, internal id %d\n", cii);
