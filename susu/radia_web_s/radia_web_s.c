@@ -16,42 +16,11 @@ pthread_t connect_th, read_event_th, client_th[MAX_CLIENT_NUM];//每个client对
 char thread_send_flag[MAX_CLIENT_NUM] = {0};
 int client_socket_descriptor[MAX_CLIENT_NUM];
 int service_socket_descriptor;
-
 char recv_msg[MAX_MSG_LEN], send_msg[MAX_MSG_LEN];
-
-int get_free_client_internal_id()
-{
-	int i, free_num = 0;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)
-	{
-		if(client_name_table[i][0] == 0)
-			free_num++;
-	}
-	return free_num;
-}
-
-int alloc_client_internal_id()//为当前client分配一个内部资源id
-{
-	int i;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)
-	{
-		if(client_name_table[i][0] == 0)
-		{
-			memcpy(client_name_table[i], "noname", strlen("noname"));
-			return i;
-		}
-	}
-	return -1;
-}
-
-int free_client_internal_id(int id)
-{
-	memset(client_name_table[id], 0, MAX_CLIENT_NAME_LEN);
-	return 0;
-}
+int display_csd;
 
 //http://172.16.12.135:9992/?tp=0x11&xx=10&yy=45&mt=3&nu=44&bc=0xFF00&wc=0x1F80
-int parse_requestline(char* req_line, struct st_radia_msg *para_msg)
+int parse_requestline(char* req_line, struct st_display_msg *para_msg)
 {
 	int n, next_n;
 	char num_string[20];
@@ -119,6 +88,8 @@ int parse_requestline(char* req_line, struct st_radia_msg *para_msg)
 		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
 		para_msg->word_color = strtol(num_string, NULL, 16);
 		printf("para_msg->word_color:0x%x\n", para_msg->word_color);
+		//调用显示模块
+		send(display_csd, (void *)(para_msg), sizeof(struct st_display_msg), 0);
 	}
 	return 1;
 }
@@ -128,7 +99,7 @@ void *client_handler(void *pcii)
 	int ret, cii = *((int *)pcii), n;
 	int csd = client_socket_descriptor[cii];
 	char buffer[1024];
-	struct st_radia_msg para_msg;
+	struct st_display_msg para_msg;
 	//此处模拟http协议，因为http协议是无状态的，因此不保持连接，通信结束立即断开
 	memset(&recv_msg, 0, MAX_MSG_LEN);
 	ret = read(csd, (void *)(&recv_msg), MAX_MSG_LEN);
@@ -148,7 +119,7 @@ void *client_handler(void *pcii)
 		printf("send ok!\n");
 	}
 	printf("disconnect one, internal id %d\n", cii);
-	free_client_internal_id(cii);
+	free_client_internal_id(client_name_table, cii);
 	close(csd);
 }
 
@@ -159,17 +130,17 @@ void *connect_handler(void *arg)
 	int csd;
 	while(1)
 	{
-		if(get_free_client_internal_id != 0)
+		if(get_free_client_internal_id(client_name_table) != 0)
 		{
 			//printf("will client internal id:%d\n", client_internal_id);
 			csd = accept(service_socket_descriptor, (struct sockaddr *)(&c_addr), &addr_len);
 			if(-1 == csd)
 			{
 					printf("accept fail !\r\n");
-					free_client_internal_id(client_internal_id);
+					//free_client_internal_id(client_name_table, client_internal_id);
 					continue;
 			}
-			client_internal_id = alloc_client_internal_id();
+			client_internal_id = alloc_client_internal_id(client_name_table);
 			client_socket_descriptor[client_internal_id] = csd;
 			printf("accept one, internal id:%d\n", client_internal_id);
 			pthread_create(&(client_th[client_internal_id]),NULL,client_handler,(void *)(&client_internal_id));//为每一个成功连接的client创建一个独立线程，处理client数据请求	
@@ -190,6 +161,10 @@ int main()
 	if(creat_server_socket(&service_socket_descriptor, WEB_PORT_NUM) != 1)
 	{
 		printf("creat_server_socket error!\n");
+	}
+	if(open_client_socket(&display_csd, "192.168.31.200", DISPLAY_PORT_NUM) != 1)		
+	{
+		printf("open_client_socket error!\n");
 	}
 	pthread_create(&connect_th, NULL, connect_handler, (void *)NULL);//创建线程，等待client连接请求
 	while(1)

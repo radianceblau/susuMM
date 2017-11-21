@@ -10,54 +10,15 @@
 #include <sys/select.h>
 #include <sys/ioctl.h>
 #include <errno.h>
+#include "../../include/radia_comm.h"
 
-#define INPUT_PORT_NUM	9991
-#define MAX_CLIENT_NUM	100			//此server能够接受的client最大数量
-#define MAX_CLIENT_NAME_LEN 100		//每个client上报name的最大字节数
-#define MAX_MSG_LEN	100
-struct st_radia_msg  
-{  
-    long int msg_type;  
-    char text[MAX_MSG_LEN];  
-};
 
 char client_name_table[MAX_CLIENT_NUM][MAX_CLIENT_NAME_LEN] = {0};//1，每个client需要上报一个name，用于标示自身。2，client_neme_table中为NULL表示该位置的连接资源未被使用。3，client_name_table中的位置确定connect_th表中的位置
 pthread_t connect_th, read_event_th, client_th[MAX_CLIENT_NUM];//每个client对用一个线程
 char thread_send_flag[MAX_CLIENT_NUM] = {0};
 int client_socket_descriptor[MAX_CLIENT_NUM];
-int service_socket_descriptor;
+int input_service_socket_descriptor;
 int key_event = 0, need_send_flag = 0;
-
-int get_free_client_internal_id()
-{
-	int i, free_num = 0;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)
-	{
-		if(client_name_table[i][0] == 0)
-			free_num++;
-	}
-	return free_num;
-}
-
-int alloc_client_internal_id()//为当前client分配一个内部资源id
-{
-	int i;
-	for(i = 0; i < MAX_CLIENT_NUM; i++)
-	{
-		if(client_name_table[i][0] == 0)
-		{
-			memcpy(client_name_table[i], "noname", strlen("noname"));
-			return i;
-		}
-	}
-	return -1;
-}
-
-int free_client_internal_id(int id)
-{
-	memset(client_name_table[id], 0, MAX_CLIENT_NAME_LEN);
-	return 0;
-}
 
 //return :返回当前已经连接成功的client数量
 int set_thread_flag()
@@ -88,31 +49,16 @@ int check_thread_flag()
 	return 1;
 }
 
-int check_socket_connect(int sd)
-{
-	int optval, optlen = sizeof(int);
-	//printf("enter check_socket_connect!\n");
-	getsockopt(sd, SOL_SOCKET, SO_ERROR,(char*) &optval, &optlen);
-	switch(optval){
-		case 0:
-			//printf("check_socket_connect connection!\n");
-			return 1;
-			break;
-		default:
-			break;
-	}
-	return -1;
-}
 
 void *client_handler(void *pcii)
 {
-	struct st_radia_msg recv_msg, send_msg;
+	//struct st_input_msg send_msg;
+	char send_msg[10];
 	int ret, cii = *((int *)pcii);
 	int csd = client_socket_descriptor[cii];
 	while(1)
 	{
-		memset(&recv_msg, 0, sizeof(struct st_radia_msg));
-		memset(&send_msg, 0, sizeof(struct st_radia_msg));
+		memset(&send_msg, 0, 10);
 		printf("enter client_handler!\n");
 		if(check_socket_connect(csd) == -1)//检测client是否断开
 		{
@@ -121,26 +67,17 @@ void *client_handler(void *pcii)
 		}
 		else if(1)//need_send_flag)
 		{
-			send_msg.msg_type = 1;
 			//整理输入事件消息，发送给关心此变化的进程
 			//.............
-			sprintf(send_msg.text, "112");
-			printf("radia send_msg:%s\n", send_msg.text);
-			send(csd, (void *)(&send_msg), strlen(send_msg.text) + sizeof(long int), 0);
-			thread_send_flag[cii] = 0;
-			//printf("client msg :%s\n", recv_msg.text);			
+			sprintf(send_msg, "112");
+			printf("radia send_msg:%s\n", send_msg);
+			send(csd, (void *)(send_msg), strlen(send_msg), 0);
+			thread_send_flag[cii] = 0;			
 		}
-		//ret = read(csd, (void *)(&recv_msg), sizeof(struct st_radia_msg));
-		////printf("ret :%d\n", ret);
-		//if(ret <= 0)//管理client id，检测client是否断开
-		//{
-		//	break;
-		//}
-		//memcpy(client_name_table[]
 		usleep(500000);
 	}
 	printf("disconnect one, internal id %d\n", cii);
-	free_client_internal_id(cii);
+	free_client_internal_id(client_name_table, cii);
 	close(csd);
 }
 
@@ -151,19 +88,19 @@ void *connect_handler(void *arg)
 	int csd;
 	while(1)
 	{
-		if(get_free_client_internal_id() != 0)
+		if(get_free_client_internal_id(client_name_table) != 0)
 		{
 			//printf("will client internal id:%d\n", client_internal_id);
-			csd = accept(service_socket_descriptor, (struct sockaddr *)(&c_addr), &addr_len);
+			csd = accept(input_service_socket_descriptor, (struct sockaddr *)(&c_addr), &addr_len);
 			//printf("csd is %d\n", csd);
 			if(-1 == csd)
 			{
 				printf("accept fail !\r\n");
-				free_client_internal_id(client_internal_id);
+				//free_client_internal_id(client_name_table, client_internal_id);
 				continue;
 			}
 			printf("accept success!!!!!!!csd is %d\n", csd);
-			client_internal_id = alloc_client_internal_id();
+			client_internal_id = alloc_client_internal_id(client_name_table);
 			client_socket_descriptor[client_internal_id] = csd;
 			printf("accept one, internal id:%d\n", client_internal_id);
 			pthread_create(&(client_th[client_internal_id]),NULL,client_handler,(void *)(&client_internal_id));//为每一个成功连接的client创建一个独立线程，处理client数据请求	
@@ -196,43 +133,14 @@ void *read_event_handler(void *arg)
 	}
 }
 
-void init_socket_server()
-{
-	struct sockaddr_in s_addr;
-	unsigned short port_num=INPUT_PORT_NUM;
-	service_socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-	if(-1 == service_socket_descriptor)
-	{
-			printf("socket fail ! \r\n");
-			return -1;
-	}
-	printf("socket ok !\r\n");
-
-	bzero(&s_addr,sizeof(struct sockaddr_in));
-	s_addr.sin_family=AF_INET;
-	s_addr.sin_addr.s_addr=htonl(INADDR_ANY);
-	s_addr.sin_port=htons(port_num);
-
-	if(-1 == bind(service_socket_descriptor,(struct sockaddr *)(&s_addr), sizeof(struct sockaddr)))
-	{
-			printf("bind fail !\r\n");
-			return -1;
-	}
-	printf("bind ok !\r\n");
-
-	if(-1 == listen(service_socket_descriptor,5))
-	{
-			printf("listen fail !\r\n");
-			return -1;
-	}
-	printf("listen ok\r\n");
-}
-
 int main()
 {
 
 	printf("run display service!\r\n");
-	init_socket_server();
+	if(creat_server_socket(&input_service_socket_descriptor, INPUT_PORT_NUM) != 1)
+	{
+		printf("creat_server_socket error!\n");
+	}
 	pthread_create(&connect_th, NULL, connect_handler, (void *)NULL);//创建线程，等待client连接请求
 	pthread_create(&read_event_th, NULL, read_event_handler, (void *)NULL);//创建线程，扫描相应按键、tp节点
 	while(1)
@@ -240,6 +148,6 @@ int main()
 		//nothing to do
 	}
 
-	close(service_socket_descriptor);
+	close(input_service_socket_descriptor);
 	return 0;
 }

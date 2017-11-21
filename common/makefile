@@ -10,13 +10,11 @@ common_arm.o : common.c
 	cp common_arm.o ../susu/radia_display_s
 	cp common_arm.o ../susu/radia_input_s
 	cp common_arm.o ../susu/radia_main_s
+	cp common_arm.o ../susu/radia_web_s
 common_pc.o : common.c
 	gcc -c common.c -o common_pc.o
-	cp -r common_pc.o ../meimei/pc_display_s
-	cp -r common_pc.o ../meimei/pc_input_s
-	cp -r common_pc.o ../meimei/pc_main_s
 	cp -r common_pc.o ../meimei/pc_spider_s
-	cp -r common_pc.o ../meimei/pc_web_s
+	cp -r common_pc.o ../meimei/pc_socket_test
 
 .PHONNY : clean
 clean:
