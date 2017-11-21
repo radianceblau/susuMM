@@ -8,12 +8,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/select.h>
+#include "../../include/radia_comm.h"
 
-
-#define WEB_PORT_NUM	9992
-#define MAX_CLIENT_NUM	100			//此server能够接受的client最大数量
-#define MAX_CLIENT_NAME_LEN 100		//每个client上报name的最大字节数
-#define MAX_MSG_LEN	10240
 
 char client_name_table[MAX_CLIENT_NUM][MAX_CLIENT_NAME_LEN] = {0};//1，每个client需要上报一个name，用于标示自身。2，client_neme_table中为NULL表示该位置的连接资源未被使用。3，client_name_table中的位置确定connect_th表中的位置
 pthread_t connect_th, read_event_th, client_th[MAX_CLIENT_NUM];//每个client对用一个线程
@@ -54,54 +50,75 @@ int free_client_internal_id(int id)
 	return 0;
 }
 
-//返回制定字符c在字符串str中的个数
-int get_nums_char(char *str, char c)
-{
-	int i, num = 0;
-	for(i = 0; i < strlen(str); i++)
-		if(str[i] == c)
-			num++;
-	return num;
-}
-
-//返回指定字符c在字符串str中第num次出现的位置，如查找失败则返回-1
-int get_cursor_char(char *str, char c, int num)
-{
-	int i, n = 0;
-	if(num <= 0)
-		return -1;
-	for(i = 0; i < strlen(str); i++)
-	{
-		if(str[i] == c)
-			n++;
-		if(n == num)
-			return i;
-	}
-	return 0;
-}
-
-//http://172.16.12.135:9992/?x=10&y=45&m=3&bg_color=0xFF00&wd_color=0x0000
-//GET /?x=10&y=45&m=3&bg_color=0xFF00&wd_color=0x0000 HTTP/1.1
-int parse_requestline(char* req_line, int * para_x, int *para_y, int *para_m, int *para_bg_color, int* para_wd_color)
+//http://172.16.12.135:9992/?tp=0x11&xx=10&yy=45&mt=3&nu=44&bc=0xFF00&wc=0x1F80
+int parse_requestline(char* req_line, struct st_radia_msg *para_msg)
 {
 	int n, next_n;
-	char num_string[10];
+	char num_string[20];
 	if(strncmp(req_line, "GET", 3) != 0)//本web server只处理GET请求
 	{//请求命令格式是否正确
 		printf("error request! not GET method\n");
 		return -1;
 	}
-	if(get_nums_char(req_line, '&') != 4)
+	if(get_nums_char(req_line, '&') != 6)
 	{
 		printf("error request! error nums of &\n");
 		return -1;
 	}
 	else
 	{
+		//-----------------------type-----------------------------------
 		n = get_cursor_char(req_line, '?', 1);
+		//printf("n:%d\n", n);
 		next_n = get_cursor_char(req_line, '&', 1);
-		strncpy(num_string, req_line[n+1], next_n - n);//will do
-		//*para_x = atoi();
+		//printf("next_n:%d\n", next_n);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		//printf("num_string:%s\n", num_string);
+		para_msg->type = strtol(num_string, NULL, 16);
+		printf("para_msg->type:0x%x\n", para_msg->type);
+		//-----------------------x-----------------------------------
+		n = get_cursor_char(req_line, '&', 1);
+		next_n = get_cursor_char(req_line, '&', 2);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->x = strtol(num_string, NULL, 10);
+		printf("para_msg->x:%d\n", para_msg->x);
+		//-----------------------y-----------------------------------
+		n = get_cursor_char(req_line, '&', 2);
+		next_n = get_cursor_char(req_line, '&', 3);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->y = strtol(num_string, NULL, 10);
+		printf("para_msg->y:%d\n", para_msg->y);
+		//-----------------------multiple-----------------------------------
+		n = get_cursor_char(req_line, '&', 3);
+		next_n = get_cursor_char(req_line, '&', 4);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->multiple = strtol(num_string, NULL, 10);
+		printf("para_msg->multiple:%d\n", para_msg->multiple);
+		//-----------------------num-----------------------------------
+		n = get_cursor_char(req_line, '&', 4);
+		next_n = get_cursor_char(req_line, '&', 5);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->num = strtol(num_string, NULL, 10);
+		printf("para_msg->num:%d\n", para_msg->num);
+		//-----------------------bg_color-----------------------------------
+		n = get_cursor_char(req_line, '&', 5);
+		next_n = get_cursor_char(req_line, '&', 6);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->bg_color = strtol(num_string, NULL, 16);
+		printf("para_msg->bg_color:0x%x\n", para_msg->bg_color);
+		//-----------------------word_color-----------------------------------
+		n = get_cursor_char(req_line, '&', 6);
+		next_n = get_cursor_char(req_line, ' ', 2);
+		memset(num_string, 0, 20);
+		strncpy(num_string, &req_line[n+1+3], next_n-n-1-3);//n+4因为将cursor从?指向0 ex:?tp=0x11
+		para_msg->word_color = strtol(num_string, NULL, 16);
+		printf("para_msg->word_color:0x%x\n", para_msg->word_color);
 	}
 	return 1;
 }
@@ -111,7 +128,7 @@ void *client_handler(void *pcii)
 	int ret, cii = *((int *)pcii), n;
 	int csd = client_socket_descriptor[cii];
 	char buffer[1024];
-	int para_x, para_y, para_m, para_bg_color, para_wd_color;
+	struct st_radia_msg para_msg;
 	//此处模拟http协议，因为http协议是无状态的，因此不保持连接，通信结束立即断开
 	memset(&recv_msg, 0, MAX_MSG_LEN);
 	ret = read(csd, (void *)(&recv_msg), MAX_MSG_LEN);
@@ -119,7 +136,8 @@ void *client_handler(void *pcii)
 	n = get_cursor_char(recv_msg, '\r', 1);//获取字符串第一行即requestline的位置
 	memset(buffer, 0, 1024);
 	strncpy(buffer, recv_msg, n+2);
-	if(1 == parse_requestline(buffer, &para_x, &para_y, &para_m, &para_bg_color, &para_wd_color))//解析http请求行中参数成功
+	printf("requestline:%s", buffer);
+	if(1 == parse_requestline(buffer, &para_msg))//解析http请求行中参数成功
 	{
 		memset(send_msg, 0, MAX_MSG_LEN);
 		memset(buffer, 0, 1024);
@@ -166,43 +184,13 @@ void *connect_handler(void *arg)
 	}	
 }
 
-void init_socket_server()
-{
-	struct sockaddr_in s_addr;
-	unsigned short port_num=WEB_PORT_NUM;
-	service_socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-	if(-1 == service_socket_descriptor)
-	{
-			printf("socket fail ! \r\n");
-			return -1;
-	}
-	printf("socket ok !\r\n");
-
-	bzero(&s_addr,sizeof(struct sockaddr_in));
-	s_addr.sin_family=AF_INET;
-	s_addr.sin_addr.s_addr=htonl(INADDR_ANY);
-	s_addr.sin_port=htons(port_num);
-
-	if(-1 == bind(service_socket_descriptor,(struct sockaddr *)(&s_addr), sizeof(struct sockaddr)))
-	{
-			printf("bind fail !\r\n");
-			return -1;
-	}
-	printf("bind ok !\r\n");
-
-	if(-1 == listen(service_socket_descriptor,5))
-	{
-			printf("listen fail !\r\n");
-			return -1;
-	}
-	printf("listen ok\r\n");	
-}
-
 int main()
 {
-
 	printf("run display service!\r\n");
-	init_socket_server();
+	if(creat_server_socket(&service_socket_descriptor, WEB_PORT_NUM) != 1)
+	{
+		printf("creat_server_socket error!\n");
+	}
 	pthread_create(&connect_th, NULL, connect_handler, (void *)NULL);//创建线程，等待client连接请求
 	while(1)
 	{

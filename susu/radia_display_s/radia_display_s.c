@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#include "../../include/radia_comm.h"
 #include "radia_display_s.h"
 
 //--------------------------------------------------------display------------------------------------------------------------------------
@@ -187,21 +188,6 @@ void init_display()
 //--------------------------------------------------------end display------------------------------------------------------------------------
 
 //------------------------------------------------------socket--------------------------------------------------------------------------
-#define DISPLAY_PORT_NUM	9990
-#define MAX_CLIENT_NUM	100			//此server能够接受的client最大数量
-#define MAX_CLIENT_NAME_LEN 100		//每个client上报name的最大字节数
-#define MAX_MSG_LEN	100
-//void show_ascii(unsigned int dwOffset_x, unsigned int dwOffset_y, int multiple, int num, short bg_color, short word_color)
-struct st_radia_msg  
-{  
-    int type;			//0x00 led; 0x10 pure,0x11 ascii,0x12 word
-	int x;
-	int y;
-	int multiple;
-	int num;
-	int bg_color;
-	int word_color;
-};
 
 char client_name_table[MAX_CLIENT_NUM][MAX_CLIENT_NAME_LEN] = {0};//1，每个client需要上报一个name，用于标示自身。2，client_neme_table中为NULL表示该位置的连接资源未被使用。3，client_name_table中的位置确定connect_th表中的位置
 pthread_t connect_th, client_th[MAX_CLIENT_NUM];//每个client对用一个线程
