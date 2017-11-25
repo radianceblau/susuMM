@@ -105,7 +105,12 @@ int main()
 		printf("start radia_web_s success\n");
 	else
 		printf("start radia_web_s failed!\n");
-	sleep(1);	
+	sleep(1);
+	if(system("/radia/radia_spider_s > /dev/null &") == 0)
+		printf("start radia_spider_s success\n");
+	else
+		printf("start radia_spider_s failed!\n");
+	sleep(1);
 	
 	if(open_client_socket(&display_csd, "127.0.0.1", DISPLAY_PORT_NUM) != 1)		
 	{
