@@ -320,6 +320,7 @@ int get_pv_sc(int *fangwen, int *jifen)
 	memcpy(jifen_buffer, &ul_buffer[jifen_start+6], jifen_end - jifen_start + 1 - 6 -1);
 	*jifen = strtol(jifen_buffer, NULL, 10);
 	printf("%d-%d:%d,jifen:%s\n", jifen_start, jifen_end, *jifen, jifen_buffer);
+	return 1;
 }
 
 struct tm *getNowTime()
@@ -360,6 +361,7 @@ int update_pv_sc(struct tm *timenow, int force_update_flag)
 			return -1;
 		display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc);
 	}
+	return 1;
 }
 int main()
 {
@@ -370,9 +372,15 @@ int main()
 	{
 		printf("open_client_socket error!\n");
 	}
-	
-	get_pv_sc(&start_pv, &start_sc);
-	get_pv_sc(&now_pv, &now_sc);
+	while(1)
+	{
+		ret = get_pv_sc(&start_pv, &start_sc);
+		now_pv = start_pv;
+		now_sc = start_sc;
+		if(ret > 0)
+			break;
+		sleep(1);
+	}
 	display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc);
 	
 	while(1)
