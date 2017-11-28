@@ -91,7 +91,7 @@ int get_html()
 	
 	send(client_socket_descriptor, (void *)(&send_msg), strlen(send_msg), 0);
 	
-	struct timeval timeout = {2,0};  //设置超时时间1秒，0代表秒后面的微秒数，左边这个就是1秒0微秒
+	struct timeval timeout = {5,0};  //设置超时时间1秒，0代表秒后面的微秒数，左边这个就是1秒0微秒
 	//设置接收超时    
 	setsockopt(client_socket_descriptor, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(struct timeval));
 	while(1)
@@ -280,7 +280,7 @@ void display_pv_sc(int pv, int pv_up, int sc, int sc_up)
 	
 }
 
-void get_pv_sc(int *fangwen, int *jifen)
+int get_pv_sc(int *fangwen, int *jifen)
 {
 	int ul_start = 0, ul_end = 0, ret;
 	int fangwen_start, fangwen_end, jifen_start, jifen_end;
@@ -300,6 +300,10 @@ void get_pv_sc(int *fangwen, int *jifen)
 	get_html();
 	ret = get_html_tag(recv_msg, "ul", "id=\"blog_rank\"", &ul_start, &ul_end);
 	printf("get_html_tag ret:%d,ul_start:%d,ul_end:%d\n", ret, ul_start, ul_end);
+	if(ret < 0)
+	{
+		return -1;
+	}
 	memset(ul_buffer, 0, sizeof(ul_buffer));
 	memcpy(ul_buffer, &recv_msg[ul_start], ul_end - ul_start + 1);
 	//printf("%s\n", ul_buffer);
@@ -331,7 +335,7 @@ struct tm *getNowTime()
 	return timenow;
 }
 
-void update_pv_sc(struct tm *timenow)
+int update_pv_sc(struct tm *timenow, int force_update_flag)
 {
 	int ret, update_start_pv_sc_flag, update_pv_start;
 	if(timenow->tm_hour == 0 && timenow->tm_min == 0)
@@ -345,16 +349,21 @@ void update_pv_sc(struct tm *timenow)
 	
 	if(update_start_pv_sc_flag)//每天0点记录一天的起始pv、sc
 	{
-		get_pv_sc(&start_pv, &start_sc);
+		ret = get_pv_sc(&start_pv, &start_sc);
+		if(ret < 0)
+			return -1;
 	}
-	if(update_pv_start)//每小时的0分、30分更新pv，更新显示
+	if(update_pv_start || force_update_flag)//每小时的0分、30分更新pv，更新显示
 	{
-		get_pv_sc(&now_pv, &now_sc);
+		ret = get_pv_sc(&now_pv, &now_sc);
+		if(ret < 0)
+			return -1;
 		display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc);
 	}
 }
 int main()
 {
+	int ret, force_flag = 0;
 	struct tm *timenow;
 	printf("radia spider running!\r\n");
 	if(open_client_socket(&display_csd, "127.0.0.1", DISPLAY_PORT_NUM) != 1)		
@@ -369,7 +378,11 @@ int main()
 	while(1)
 	{
 		timenow = getNowTime();
-		update_pv_sc(timenow);
+		ret = update_pv_sc(timenow, force_flag);
+		if(ret < 0)
+			force_flag = 1;
+		else 
+			force_flag = 0;
 		sleep(43);
 	}
 	close(client_socket_descriptor);
