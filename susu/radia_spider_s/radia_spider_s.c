@@ -18,7 +18,7 @@
 int client_socket_descriptor;
 int display_csd;//display_csd;
 char recv_msg[MAX_RECV_MSG_LEN], send_msg[MAX_SEND_MSG_LEN];
-int now_pv = 0, start_pv = 0, now_sc = 0, start_sc = 0;
+int now_pv = 0, start_pv = 0, now_sc = 0, start_sc = 0, now_rk = 0, start_rk = 0;
 
 struct addrinfo {
    int              ai_flags;
@@ -163,43 +163,43 @@ int get_cursor_str_specified_length(char *str, int len, char *t_str, int num)
 	return -1;
 }
 
-//返回制定属性的html标签在字符串中的起始位置坐标和技术位置坐标
+//返回第num_of_tag个制定属性的html标签在字符串中的起始位置坐标和技术位置坐标
 //tag="ul"		只针对有结束标签的tag
 //prop="id="blog_rank""
-int get_html_tag(char *page_buffer, char *tag, char *prop, int *start, int *end)
+int get_html_tag(char *page_buffer, int num_of_tag, char *tag, char *prop, int *start, int *end)
 {
-	int i, j, debug, cursor = 0;
+	int i, j, n_of_t = 0, debug, cursor = 0;
 	char start_tag_buffer[100], end_tag_buffer[100];
 	int start_tag_start/*<ul*/, start_tag_end/*>*/, end_tag_start/*</ul*/, end_tag_end/*>*/;
 	int num, page_buffer_len;
 
-	printf("enter get_html_tag\n");
+	//printf("enter get_html_tag\n");
 	page_buffer_len = strlen(page_buffer);
-	printf("page_buffer_len:%d\n", page_buffer_len);
+	//printf("page_buffer_len:%d\n", page_buffer_len);
 	memset(start_tag_buffer, 0 , sizeof(start_tag_buffer));
 	memset(end_tag_buffer, 0 , sizeof(end_tag_buffer));
 	memcpy(start_tag_buffer, "<", 1);
 	memcpy(start_tag_buffer+1, tag, strlen(tag));
 	memcpy(start_tag_buffer+1+strlen(tag), " ", 1);// "<ul "
-	printf("start_tag_buffer:%s\n", start_tag_buffer);
+	//printf("start_tag_buffer:%s\n", start_tag_buffer);
 	memcpy(end_tag_buffer, "</", 2);
 	memcpy(end_tag_buffer+2, tag, strlen(tag));
 	memcpy(end_tag_buffer+2+strlen(tag), ">", 1);// "</ul>"
-	printf("end_tag_buffer:%s\n", end_tag_buffer);
+	//printf("end_tag_buffer:%s\n", end_tag_buffer);
 	
 	for(i = 0; i < page_buffer_len;)
 	{
-		printf("i loop :%d   ", i);
+		//printf("i loop :%d   ", i);
 		start_tag_start = get_cursor_str_specified_length(&page_buffer[i], 0, start_tag_buffer, 1);//找到tag起始位置
-		printf("start_tag_start:%d\n", start_tag_start);
+		//printf("start_tag_start:%d\n", start_tag_start);
 		if(start_tag_start < 0)
 			return -1;
 		start_tag_end = get_cursor_str_specified_length(&page_buffer[i+start_tag_start] ,0, ">", 1);//找到tag的>位置
-		printf("start_tag_end:%d\n", start_tag_end);
+		//printf("start_tag_end:%d\n", start_tag_end);
 		if(start_tag_end <= 0)
 			return -2;
 		num = get_nums_str_specified_length(&page_buffer[i+start_tag_start+1], start_tag_end, "<");
-		printf("< num:%d\n", num);
+		//printf("< num:%d\n", num);
 		if(num > 0)
 		{
 			debug = get_cursor_str_specified_length(&page_buffer[i+start_tag_start+1], start_tag_end, "<", 1);
@@ -208,43 +208,47 @@ int get_html_tag(char *page_buffer, char *tag, char *prop, int *start, int *end)
 		}
 		num = get_nums_str_specified_length(&page_buffer[i+start_tag_start+1], start_tag_end, prop);//查看这个标签中从<ul  到  >  是否包含目标属性
 		cursor = i+start_tag_start+start_tag_end;//光标位于开始标签的结尾
-		printf("prop num :%d, cursor:%d:%c\n", num, cursor, page_buffer[cursor]);
+		//printf("prop num :%d, cursor:%d:%c\n", num, cursor, page_buffer[cursor]);
 		if(num > 0)//属性找到
 		{
-			int n, nest = 0;//在寻找结束标签时，找到了相同标签的嵌套，应该忽略<div><div></div></div>
-			for(j = 0; j < page_buffer_len-cursor;)
+			n_of_t++;
+			if(n_of_t == num_of_tag)
 			{
-				printf("j loop %d\n", j);
-				end_tag_start = get_cursor_str_specified_length(&page_buffer[cursor+1+j], 0, end_tag_buffer, 1);
-				printf("end_tag_start:%d\n", end_tag_start);
-				if(end_tag_start < 0)
-					return -4;
-				end_tag_end = end_tag_start + strlen(end_tag_buffer);
-				printf("end_tag_end:%d\n", end_tag_end);
-				n = get_nums_str_specified_length(&page_buffer[cursor+1+j], end_tag_start, start_tag_buffer);
-				if(n >= 1)
+				int n, nest = 0;//在寻找结束标签时，找到了相同标签的嵌套，应该忽略<div><div></div></div>
+				for(j = 0; j < page_buffer_len-cursor;)
 				{
-					nest++;
-					j=j+end_tag_end;
+					//printf("j loop %d\n", j);
+					end_tag_start = get_cursor_str_specified_length(&page_buffer[cursor+1+j], 0, end_tag_buffer, 1);
+					//printf("end_tag_start:%d\n", end_tag_start);
+					if(end_tag_start < 0)
+						return -4;
+					end_tag_end = end_tag_start + strlen(end_tag_buffer);
+					//printf("end_tag_end:%d\n", end_tag_end);
+					n = get_nums_str_specified_length(&page_buffer[cursor+1+j], end_tag_start, start_tag_buffer);
+					if(n >= 1)
+					{
+						nest++;
+						j=j+end_tag_end;
+					}
+					else
+						break;					
 				}
-				else
-					break;					
+				if(j >= page_buffer_len-cursor)
+					return -5;
+				//printf("start_tag_start:%d,end_tag_end:%d\n", start_tag_start, end_tag_end);
+				*start = start_tag_start + i;
+				*end = end_tag_end + cursor;
+				break;
 			}
-			if(j >= page_buffer_len-cursor)
-				return -5;
-			printf("start_tag_start:%d,end_tag_end:%d\n", start_tag_start, end_tag_end);
-			*start = start_tag_start + i;
-			*end = end_tag_end + cursor;
-			break;
 		}
 		i = i + start_tag_start + start_tag_end + 1;//指向tag结尾的下一个字符
 	}
 	return 1;
 }
 
-void display_pv_sc(int pv, int pv_up, int sc, int sc_up)
+void display_pv_sc(int pv, int pv_up, int sc, int sc_up, int rk, int rk_up)
 {
-	int pv_x = 220, pv_y = 180, sc_x = 220, sc_y = 200, mt = 2, offset = 16;
+	int pv_x = 220, pv_y = 180, sc_x = 220, sc_y = 200, rk_x = 220, rk_y =220, rk_up_unsigned, rk_up_color, mt = 2, offset = 16;
 	//send_display_msg(0x10, pv_x, pv_y, mt, 48, 0, 0xffff);//pure
 	send_display_msg(0x11, pv_x, pv_y, mt, 48, 0, 0xffff);//P
 	send_display_msg(0x11, pv_x+offset, pv_y, mt, 54, 0, 0xffff);//V
@@ -266,26 +270,132 @@ void display_pv_sc(int pv, int pv_up, int sc, int sc_up)
 	send_display_msg(0x11, sc_x+offset, sc_y, mt, 35, 0, 0xffff);//C
 	send_display_msg(0x11, sc_x+offset*2, sc_y, mt, 26, 0, 0xffff);//:
 	if(sc/10000)
-	send_display_msg(0x11, sc_x+offset*3, sc_y, mt, 16+((sc/10000)%10000), 0, 0xffff);//万
-	send_display_msg(0x11, sc_x+offset*4, sc_y, mt, 16+((sc/1000)%10), 0, 0xffff);//千
-	send_display_msg(0x11, sc_x+offset*5, sc_y, mt, 16+((sc/100)%10), 0, 0xffff);//百
-	send_display_msg(0x11, sc_x+offset*6, sc_y, mt, 16+((sc/10)%10), 0, 0xffff);//十
-	send_display_msg(0x11, sc_x+offset*7, sc_y, mt, 16+(sc%10), 0, 0xffff);//个
+	send_display_msg(0x11, sc_x+offset*4, sc_y, mt, 16+((sc/10000)%10000), 0, 0xffff);//万
+	send_display_msg(0x11, sc_x+offset*5, sc_y, mt, 16+((sc/1000)%10), 0, 0xffff);//千
+	send_display_msg(0x11, sc_x+offset*6, sc_y, mt, 16+((sc/100)%10), 0, 0xffff);//百
+	send_display_msg(0x11, sc_x+offset*7, sc_y, mt, 16+((sc/10)%10), 0, 0xffff);//十
+	send_display_msg(0x11, sc_x+offset*8, sc_y, mt, 16+(sc%10), 0, 0xffff);//个
 	send_display_msg(0x11, sc_x+offset*9, sc_y, mt, 11, 0, SCREEN_COLOR_RED);//+
 	send_display_msg(0x11, sc_x+offset*10, sc_y, mt, 16+((sc_up/1000)%10), 0, SCREEN_COLOR_RED);//+
 	send_display_msg(0x11, sc_x+offset*11, sc_y, mt, 16+((sc_up/100)%10), 0, SCREEN_COLOR_RED);//+
 	send_display_msg(0x11, sc_x+offset*12, sc_y, mt, 16+((sc_up/10)%10), 0, SCREEN_COLOR_RED);//+
 	send_display_msg(0x11, sc_x+offset*13, sc_y, mt, 16+(sc_up%10), 0, SCREEN_COLOR_RED);//+
-		
+	
+	send_display_msg(0x11, rk_x, rk_y, mt, 50, 0, 0xffff);//R
+	send_display_msg(0x11, rk_x+offset, rk_y, mt, 43, 0, 0xffff);//K
+	send_display_msg(0x11, rk_x+offset*2, rk_y, mt, 26, 0, 0xffff);//:
+	if(rk/10000)
+	send_display_msg(0x11, rk_x+offset*4, rk_y, mt, 16+((rk/10000)%10000), 0, 0xffff);//万
+	send_display_msg(0x11, rk_x+offset*5, rk_y, mt, 16+((rk/1000)%10), 0, 0xffff);//千
+	send_display_msg(0x11, rk_x+offset*6, rk_y, mt, 16+((rk/100)%10), 0, 0xffff);//百
+	send_display_msg(0x11, rk_x+offset*7, rk_y, mt, 16+((rk/10)%10), 0, 0xffff);//十
+	send_display_msg(0x11, rk_x+offset*8, rk_y, mt, 16+(rk%10), 0, 0xffff);//个
+	if(rk_up <= 0)
+	{
+		rk_up_unsigned = -rk_up;
+		rk_up_color = SCREEN_COLOR_GREEN;
+		send_display_msg(0x11, rk_x+offset*9, rk_y, mt, 13, 0, rk_up_color);//-
+	}
+	else
+	{
+		rk_up_unsigned = rk_up;
+		rk_up_color = SCREEN_COLOR_RED;
+		send_display_msg(0x11, rk_x+offset*9, rk_y, mt, 11, 0, rk_up_color);//+
+	}
+	send_display_msg(0x11, rk_x+offset*10, rk_y, mt, 16+((rk_up_unsigned/1000)%10), 0, rk_up_color);//+
+	send_display_msg(0x11, rk_x+offset*11, rk_y, mt, 16+((rk_up_unsigned/100)%10), 0, rk_up_color);//+
+	send_display_msg(0x11, rk_x+offset*12, rk_y, mt, 16+((rk_up_unsigned/10)%10), 0, rk_up_color);//+
+	send_display_msg(0x11, rk_x+offset*13, rk_y, mt, 16+(rk_up_unsigned%10), 0, rk_up_color);//+
 	
 }
 
-int get_pv_sc(int *fangwen, int *jifen)
+int get_pv(char *src_buffer, int *fangwen)
+{
+	char html_buffer[1024], fangwen_buffer[100], fangwen_wipe_comma[100];
+	int ret, i, n = 0, div_start, div_end, fangwen_start, fangwen_end;
+	
+	ret = get_html_tag(src_buffer, 1, "div", "class=\"gradeAndbadge\"", &div_start, &div_end);
+	printf("get_html_tag ret:%d,div_start:%d,div_end:%d\n", ret, div_start, div_end);
+	if(ret < 0)
+	{
+		return -1;
+	}	
+	memset(html_buffer, 0, sizeof(html_buffer));
+	memcpy(html_buffer, &src_buffer[div_start], div_end - div_start + 1);
+	memset(fangwen_buffer, 0 ,sizeof(fangwen_buffer));
+	fangwen_start = get_cursor_str_specified_length(html_buffer, 0, "<span class=\"num\">", 1);
+	fangwen_end = get_cursor_str_specified_length(html_buffer, 0, "</span>", 2);
+	memcpy(fangwen_buffer, &html_buffer[fangwen_start+18], fangwen_end - fangwen_start + 1 - 18 - 1);
+	
+	memset(fangwen_wipe_comma, 0, sizeof(fangwen_wipe_comma));
+	for(i = 0; i < strlen(fangwen_buffer); i++)
+	{
+		if(fangwen_buffer[i] == ',')
+		{
+			n++;
+		}
+		else
+		{
+			fangwen_wipe_comma[i - n] = fangwen_buffer[i];
+		}
+	}
+	*fangwen = strtol(fangwen_wipe_comma, NULL, 10);
+	printf("%d-%d:%d,fangwen:%s\n",fangwen_start, fangwen_end, *fangwen, fangwen_wipe_comma);
+	
+	return 1;
+}
+
+int get_sc(char *src_buffer, int *jifen)
+{
+	char html_buffer[1024], jifen_buffer[100];
+	int ret, div_start, div_end, fangwen_start, fangwen_end;
+	
+	ret = get_html_tag(src_buffer, 3, "div", "class=\"gradeAndbadge\"", &div_start, &div_end);
+	printf("get_html_tag ret:%d,div_start:%d,div_end:%d\n", ret, div_start, div_end);
+	if(ret < 0)
+	{
+		return -1;
+	}	
+	memset(html_buffer, 0, sizeof(html_buffer));
+	memcpy(html_buffer, &src_buffer[div_start], div_end - div_start + 1);
+	//printf("jifen_buffer:%s\n", html_buffer);
+	memset(jifen_buffer, 0 ,sizeof(jifen_buffer));
+	fangwen_start = get_cursor_str_specified_length(html_buffer, 0, "<span  class=\"num\">", 1);
+	fangwen_end = get_cursor_str_specified_length(html_buffer, 0, "</span>", 2);
+	memcpy(jifen_buffer, &html_buffer[fangwen_start+19], fangwen_end - fangwen_start + 1 - 19 - 1);
+	*jifen = strtol(jifen_buffer, NULL, 10);
+	printf("%d-%d:%d,jifen:%s\n",fangwen_start, fangwen_end, *jifen, jifen_buffer);
+	
+	return 1;
+}
+
+int get_rk(char *src_buffer, int *paiming)
+{
+	char html_buffer[1024], paiming_buffer[100];
+	int ret, div_start, div_end, fangwen_start, fangwen_end;
+	
+	ret = get_html_tag(src_buffer, 2, "div", "class=\"gradeAndbadge\"", &div_start, &div_end);
+	printf("get_html_tag ret:%d,div_start:%d,div_end:%d\n", ret, div_start, div_end);
+	if(ret < 0)
+	{
+		return -1;
+	}	
+	memset(html_buffer, 0, sizeof(html_buffer));
+	memcpy(html_buffer, &src_buffer[div_start], div_end - div_start + 1);
+	memset(paiming_buffer, 0 ,sizeof(paiming_buffer));
+	fangwen_start = get_cursor_str_specified_length(html_buffer, 0, "<span class=\"num\">", 1);
+	fangwen_end = get_cursor_str_specified_length(html_buffer, 0, "</span>", 2);
+	memcpy(paiming_buffer, &html_buffer[fangwen_start+18], fangwen_end - fangwen_start + 1 - 18 - 1);
+	*paiming = strtol(paiming_buffer, NULL, 10);
+	printf("%d-%d:%d,paiming:%s\n",fangwen_start, fangwen_end, *paiming, paiming_buffer);
+	
+	return 1;
+}
+
+int get_msg_from_html(int *fangwen, int *jifen, int *paiming)
 {
 	int ul_start = 0, ul_end = 0, ret;
-	int fangwen_start, fangwen_end, jifen_start, jifen_end;
 	char ipstr[16];
-	char ul_buffer[1024], fangwen_buffer[100], jifen_buffer[100];
 
 	ret = get_ip_from_URL("www.csdn.net", ipstr);
 	if(ret != 1)
@@ -298,28 +408,11 @@ int get_pv_sc(int *fangwen, int *jifen)
 		printf("open_client_socket error!\n");
 	}
 	get_html();
-	ret = get_html_tag(recv_msg, "ul", "id=\"blog_rank\"", &ul_start, &ul_end);
-	printf("get_html_tag ret:%d,ul_start:%d,ul_end:%d\n", ret, ul_start, ul_end);
-	if(ret < 0)
-	{
-		return -1;
-	}
-	memset(ul_buffer, 0, sizeof(ul_buffer));
-	memcpy(ul_buffer, &recv_msg[ul_start], ul_end - ul_start + 1);
-	//printf("%s\n", ul_buffer);
-	memset(fangwen_buffer, 0 ,sizeof(fangwen_buffer));
-	fangwen_start = get_cursor_str_specified_length(ul_buffer, 0, "<span>", 1);
-	fangwen_end = get_cursor_str_specified_length(ul_buffer, 0, "</span>", 1);
-	memcpy(fangwen_buffer, &ul_buffer[fangwen_start+6], fangwen_end - fangwen_start + 1 - 6 -1 - 3);
-	*fangwen = strtol(fangwen_buffer, NULL, 10);
-	printf("%d-%d:%d,fangwen:%s\n",fangwen_start, fangwen_end, *fangwen, fangwen_buffer);
 	
-	memset(jifen_buffer, 0, sizeof(jifen_buffer));
-	jifen_start = get_cursor_str_specified_length(ul_buffer, 0, "<span>", 2);
-	jifen_end = get_cursor_str_specified_length(ul_buffer, 0, "</span>", 2);
-	memcpy(jifen_buffer, &ul_buffer[jifen_start+6], jifen_end - jifen_start + 1 - 6 -1);
-	*jifen = strtol(jifen_buffer, NULL, 10);
-	printf("%d-%d:%d,jifen:%s\n", jifen_start, jifen_end, *jifen, jifen_buffer);
+	get_pv(recv_msg, fangwen);
+	get_sc(recv_msg, jifen);
+	get_rk(recv_msg, paiming);
+
 	return 1;
 }
 
@@ -335,31 +428,39 @@ struct tm *getNowTime()
 	//上句中asctime函数把时间转换成字符，通过printf()函数输出
 	return timenow;
 }
-
+int update_time_table[] = {0, 6, 8, 10, 12, 14, 16, 18, 20, 22,};
 int update_pv_sc(struct tm *timenow, int force_update_flag)
 {
-	int ret, update_start_pv_sc_flag, update_pv_start;
+	int ret, update_start_pv_sc_flag, update_pv_start, i;
 	if(timenow->tm_hour == 0 && timenow->tm_min == 0)
 		update_start_pv_sc_flag = 1;
 	else 
 		update_start_pv_sc_flag = 0;
-	if(/*timenow->tm_sec == 0*/(timenow->tm_min == 0 || timenow->tm_min == 30))
-		update_pv_start = 1;
-	else 
+	//if(/*timenow->tm_sec == 0*/(timenow->tm_min == 0 || timenow->tm_min == 30))
+		//update_pv_start = 1;
+	//else 
 		update_pv_start = 0;
+	for(i = 0; i < sizeof(update_time_table); i++)
+	{
+		if((timenow->tm_hour == update_time_table[i]) && timenow->tm_min == 0)
+		{
+			update_pv_start = 1;
+			break;
+		}
+	}
 	
 	if(update_start_pv_sc_flag)//每天0点记录一天的起始pv、sc
 	{
-		ret = get_pv_sc(&start_pv, &start_sc);
+		ret = get_msg_from_html(&start_pv, &start_sc, &start_rk);
 		if(ret < 0)
 			return -1;
 	}
-	if(update_pv_start || force_update_flag)//每小时的0分、30分更新pv，更新显示
+	if(update_pv_start || force_update_flag)//更新pv，更新显示
 	{
-		ret = get_pv_sc(&now_pv, &now_sc);
+		ret = get_msg_from_html(&now_pv, &now_sc, &now_rk);
 		if(ret < 0)
 			return -1;
-		display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc);
+		display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc, now_rk, now_rk - start_rk);
 	}
 	return 1;
 }
@@ -374,14 +475,15 @@ int main()
 	}
 	while(1)
 	{
-		ret = get_pv_sc(&start_pv, &start_sc);
+		ret = get_msg_from_html(&start_pv, &start_sc, &start_rk);
 		now_pv = start_pv;
 		now_sc = start_sc;
+		now_rk = start_rk;
 		if(ret > 0)
 			break;
 		sleep(1);
 	}
-	display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc);
+	display_pv_sc(now_pv, now_pv - start_pv, now_sc, now_sc - start_sc, now_rk, now_rk - start_rk);
 	
 	while(1)
 	{
